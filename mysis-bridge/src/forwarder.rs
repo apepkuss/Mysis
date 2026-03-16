@@ -119,7 +119,6 @@ impl LlmForwarder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mysis_core::protocol::*;
 
     #[test]
     fn build_openai_request_body() {

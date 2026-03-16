@@ -9,6 +9,7 @@ pub struct DeviceInfo {
 
 pub struct DeviceManager {
     devices: HashMap<String, DeviceInfo>,
+    #[allow(dead_code)]
     timeout: Duration,
 }
 
@@ -34,18 +35,21 @@ impl DeviceManager {
         info.online = true;
     }
 
+    #[allow(dead_code)]
     pub fn mark_offline(&mut self, device_id: &str) {
         if let Some(info) = self.devices.get_mut(device_id) {
             info.online = false;
         }
     }
 
+    #[allow(dead_code)]
     pub fn is_online(&self, device_id: &str) -> bool {
         self.devices
             .get(device_id)
             .is_some_and(|info| info.online && info.last_seen.elapsed() < self.timeout)
     }
 
+    #[allow(dead_code)]
     pub fn online_devices(&self) -> Vec<&str> {
         self.devices
             .iter()

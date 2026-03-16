@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -31,6 +29,7 @@ pub struct LlmConfig {
     pub base_url: String,
     #[serde(default = "default_model")]
     pub model: String,
+    #[allow(dead_code)]
     #[serde(default = "default_max_tokens")]
     pub max_tokens: u32,
     #[serde(default = "default_timeout")]
