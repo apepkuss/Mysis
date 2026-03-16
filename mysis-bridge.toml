@@ -1,0 +1,14 @@
+[mqtt]
+broker = "localhost"
+port = 1883
+client_id = "mysis-bridge"
+
+[llm]
+# ironmlx 本地 LLM 推理服务
+base_url = "http://localhost:8000/v1"
+model = "qwen3-8b"
+max_tokens = 512
+timeout_secs = 30
+
+[devices]
+heartbeat_timeout_secs = 120
