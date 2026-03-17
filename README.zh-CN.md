@@ -70,6 +70,8 @@ mysis-esp32/         # ESP32-S3 固件：WiFi、MQTT、GPIO 工具
 
 以 ZeroClaw 为蓝本，Mysis 针对 ESP32 平台进行设计，采用 Agent 循环 + Tool trait 设计，裁剪掉桌面级功能（记忆、多渠道、Gateway），加入了 ESP32 硬件驱动和分布式 MQTT 通信，使其能在 512KB SRAM 的微控制器上运行。
 
+<div align="center">
+
 | 维度 | **Mysis** | **ZeroClaw** |
 | --- | --- | --- |
 | **定位** | ESP32 智能家居 AI Agent | 通用自主 AI Agent 运行时 |
@@ -78,7 +80,11 @@ mysis-esp32/         # ESP32-S3 固件：WiFi、MQTT、GPIO 工具
 | **内存占用** | ~276 KB (嵌入式优化) | < 5 MB (桌面级) |
 | **二进制大小** | 交叉编译 | ~8.8 MB (release) |
 
+</div>
+
 ### 架构对比
+
+<div align="center">
 
 | 维度 | **Mysis** | **ZeroClaw** |
 | --- | --- | --- |
@@ -90,6 +96,8 @@ mysis-esp32/         # ESP32-S3 固件：WiFi、MQTT、GPIO 工具
 | **记忆系统** | 无 | SQLite FTS5 + 向量混合搜索 |
 | **安全** | 无 (MVP) | 配对码 + Bearer token + AES-256 + workspace 隔离 |
 | **可观测性** | `log` 宏 | Prometheus + OpenTelemetry + 结构化 tracing |
+
+</div>
 
 ### Mysis 独有
 

@@ -70,6 +70,8 @@ mysis-esp32/         # ESP32-S3 firmware: WiFi, MQTT, GPIO tools
 
 Using ZeroClaw as a blueprint, Mysis is designed for the ESP32 platform with an Agent loop + Tool trait architecture. It strips desktop-level features (memory, multi-channel, Gateway) and adds ESP32 hardware drivers with distributed MQTT communication to run on a microcontroller with 512KB SRAM.
 
+<div align="center">
+
 | Dimension | **Mysis** | **ZeroClaw** |
 |-----------|-----------|--------------|
 | **Target** | ESP32 smart home AI Agent | General-purpose autonomous AI Agent runtime |
@@ -78,7 +80,11 @@ Using ZeroClaw as a blueprint, Mysis is designed for the ESP32 platform with an 
 | **Memory** | ~276 KB (embedded-optimized) | < 5 MB (desktop-grade) |
 | **Binary** | Cross-compiled | ~8.8 MB (release) |
 
+</div>
+
 ### Architecture Comparison
+
+<div align="center">
 
 | Dimension | **Mysis** | **ZeroClaw** |
 |-----------|-----------|--------------|
@@ -90,6 +96,8 @@ Using ZeroClaw as a blueprint, Mysis is designed for the ESP32 platform with an 
 | **Memory System** | None | SQLite FTS5 + vector hybrid search |
 | **Security** | None (MVP) | Pairing code + Bearer token + AES-256 + workspace isolation |
 | **Observability** | `log` macros | Prometheus + OpenTelemetry + structured tracing |
+
+</div>
 
 ### Unique to Mysis
 
