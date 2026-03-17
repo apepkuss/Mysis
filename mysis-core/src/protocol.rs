@@ -80,6 +80,60 @@ pub struct Command {
     pub arguments: serde_json::Value,
 }
 
+/// 记忆存储请求（ESP32 → Bridge）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryStoreRequest {
+    pub id: String,
+    pub category: String, // preference / fact / event
+    pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
+}
+
+/// 记忆召回请求（ESP32 → Bridge）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryRecallRequest {
+    pub id: String,
+    pub query: String,
+    #[serde(default = "default_recall_limit")]
+    pub limit: u32,
+}
+
+fn default_recall_limit() -> u32 {
+    5
+}
+
+/// 记忆召回结果（Bridge → ESP32）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryRecallResult {
+    pub id: String,
+    pub memories: Vec<MemoryEntry>,
+}
+
+/// 单条记忆条目
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryEntry {
+    pub category: String,
+    pub content: String,
+    #[serde(default)]
+    pub relevance: f32,
+}
+
+/// 冷启动恢复响应（Bridge → ESP32）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemorySyncResponse {
+    pub id: String,
+    pub preferences: Vec<MemoryPreference>,
+    pub summary: String,
+}
+
+/// 偏好键值对
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryPreference {
+    pub key: String,
+    pub value: String,
+}
+
 /// MQTT 主题构建辅助
 pub struct Topics;
 
@@ -98,6 +152,22 @@ impl Topics {
 
     pub fn command(device_id: &str) -> String {
         format!("mysis/{device_id}/command")
+    }
+
+    pub fn memory_store(device_id: &str) -> String {
+        format!("mysis/{device_id}/memory/store")
+    }
+
+    pub fn memory_recall(device_id: &str) -> String {
+        format!("mysis/{device_id}/memory/recall")
+    }
+
+    pub fn memory_result(device_id: &str) -> String {
+        format!("mysis/{device_id}/memory/result")
+    }
+
+    pub fn memory_sync(device_id: &str) -> String {
+        format!("mysis/{device_id}/memory/sync")
     }
 }
 
@@ -169,6 +239,76 @@ mod tests {
         let cmd: Command = serde_json::from_str(json).unwrap();
         assert_eq!(cmd.id, "cmd-001");
         assert_eq!(cmd.tool, "gpio_write");
+    }
+
+    #[test]
+    fn serialize_memory_store_request() {
+        let req = MemoryStoreRequest {
+            id: "mem-001".into(),
+            category: "preference".into(),
+            content: "用户说'灯'时默认指客厅灯".into(),
+            metadata: Some(serde_json::json!({
+                "key": "default_light",
+                "value": "living_room_light"
+            })),
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("mem-001"));
+        assert!(json.contains("preference"));
+    }
+
+    #[test]
+    fn serialize_memory_recall_request() {
+        let req = MemoryRecallRequest {
+            id: "mem-002".into(),
+            query: "浇花 时间".into(),
+            limit: 3,
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("浇花 时间"));
+        assert!(json.contains("3"));
+    }
+
+    #[test]
+    fn deserialize_memory_recall_result() {
+        let json = r#"{
+            "id": "mem-002",
+            "memories": [
+                {"category": "event", "content": "2026-03-15 浇花", "relevance": 0.92}
+            ]
+        }"#;
+        let result: MemoryRecallResult = serde_json::from_str(json).unwrap();
+        assert_eq!(result.memories.len(), 1);
+        assert_eq!(result.memories[0].category, "event");
+    }
+
+    #[test]
+    fn serialize_memory_sync_response() {
+        let resp = MemorySyncResponse {
+            id: "mem-003".into(),
+            preferences: vec![MemoryPreference {
+                key: "default_light".into(),
+                value: "living_room_light".into(),
+            }],
+            summary: "用户常在晚上8点开客厅灯".into(),
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(json.contains("default_light"));
+        assert!(json.contains("living_room_light"));
+    }
+
+    #[test]
+    fn memory_topics() {
+        assert_eq!(Topics::memory_store("dev-01"), "mysis/dev-01/memory/store");
+        assert_eq!(
+            Topics::memory_recall("dev-01"),
+            "mysis/dev-01/memory/recall"
+        );
+        assert_eq!(
+            Topics::memory_result("dev-01"),
+            "mysis/dev-01/memory/result"
+        );
+        assert_eq!(Topics::memory_sync("dev-01"), "mysis/dev-01/memory/sync");
     }
 
     #[test]
