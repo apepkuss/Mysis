@@ -1,10 +1,14 @@
 mod config;
 mod device_manager;
 mod forwarder;
+mod memory_handler;
+mod memory_store;
 
 use crate::config::BridgeConfig;
 use crate::device_manager::DeviceManager;
 use crate::forwarder::LlmForwarder;
+use crate::memory_handler::{handle_memory_recall, handle_memory_store};
+use crate::memory_store::SqliteMemoryStore;
 use mysis_core::protocol::*;
 
 use clap::Parser;
@@ -34,6 +38,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.devices.heartbeat_timeout_secs,
     ))));
 
+    // 初始化记忆存储
+    let db_path = &config.memory.db_path;
+    if let Some(parent) = std::path::Path::new(db_path).parent() {
+        std::fs::create_dir_all(parent).ok();
+    }
+    let memory_store = Arc::new(Mutex::new(
+        SqliteMemoryStore::open(db_path)
+            .map_err(|e| format!("failed to open memory database: {e}"))?,
+    ));
+    tracing::info!("memory store initialized at {db_path}");
+
     // MQTT 连接
     let mut mqtt_opts = MqttOptions::new(
         &config.mqtt.client_id,
@@ -44,11 +59,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (client, mut eventloop) = AsyncClient::new(mqtt_opts, 64);
 
-    // 订阅所有设备的 LLM 请求和状态主题
+    // 订阅所有设备的 LLM 请求、状态和记忆主题
     client
         .subscribe("mysis/+/llm/request", QoS::AtLeastOnce)
         .await?;
     client.subscribe("mysis/+/status", QoS::AtLeastOnce).await?;
+    client
+        .subscribe("mysis/+/memory/store", QoS::AtLeastOnce)
+        .await?;
+    client
+        .subscribe("mysis/+/memory/recall", QoS::AtLeastOnce)
+        .await?;
     tracing::info!("subscribed to MQTT topics");
 
     // 事件循环
@@ -60,10 +81,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let client = client.clone();
                 let forwarder = forwarder.clone();
                 let device_manager = device_manager.clone();
+                let memory_store = memory_store.clone();
 
                 tokio::spawn(async move {
-                    if let Err(e) =
-                        handle_message(&topic, &payload, &client, &forwarder, &device_manager).await
+                    if let Err(e) = handle_message(
+                        &topic,
+                        &payload,
+                        &client,
+                        &forwarder,
+                        &device_manager,
+                        &memory_store,
+                    )
+                    .await
                     {
                         tracing::error!("error handling {topic}: {e}");
                     }
@@ -84,6 +113,7 @@ async fn handle_message(
     client: &AsyncClient,
     forwarder: &LlmForwarder,
     device_manager: &Arc<Mutex<DeviceManager>>,
+    memory_store: &Arc<Mutex<SqliteMemoryStore>>,
 ) -> Result<(), String> {
     let parts: Vec<&str> = topic.split('/').collect();
     // 预期格式: mysis/{device_id}/{type}/...
@@ -110,6 +140,32 @@ async fn handle_message(
             .map_err(|e| format!("MQTT publish failed: {e}"))?;
 
         tracing::info!("sent LLM response to {resp_topic}");
+    } else if topic.ends_with("/memory/store") {
+        let req: MemoryStoreRequest = serde_json::from_slice(payload)
+            .map_err(|e| format!("invalid memory store request JSON: {e}"))?;
+
+        let mut store = memory_store.lock().await;
+        handle_memory_store(&mut store, device_id, &req)?;
+        tracing::info!("stored memory for {device_id}: {}", req.category);
+    } else if topic.ends_with("/memory/recall") {
+        let req: MemoryRecallRequest = serde_json::from_slice(payload)
+            .map_err(|e| format!("invalid memory recall request JSON: {e}"))?;
+
+        let store = memory_store.lock().await;
+        let result = handle_memory_recall(&store, device_id, &req)?;
+        let result_json = serde_json::to_vec(&result)
+            .map_err(|e| format!("failed to serialize recall result: {e}"))?;
+
+        let result_topic = Topics::memory_result(device_id);
+        client
+            .publish(&result_topic, QoS::AtLeastOnce, false, result_json)
+            .await
+            .map_err(|e| format!("MQTT publish failed: {e}"))?;
+
+        tracing::info!(
+            "recalled {} memories for {device_id}",
+            result.memories.len()
+        );
     } else if topic.ends_with("/status") {
         // 心跳处理
         let heartbeat: Heartbeat =

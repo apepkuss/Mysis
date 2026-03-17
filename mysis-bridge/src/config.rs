@@ -6,6 +6,27 @@ pub struct BridgeConfig {
     pub llm: LlmConfig,
     #[serde(default)]
     pub devices: DevicesConfig,
+    #[serde(default)]
+    pub memory: MemoryConfig,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MemoryConfig {
+    #[serde(default = "default_memory_db_path")]
+    pub db_path: String,
+}
+
+fn default_memory_db_path() -> String {
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+    format!("{home}/.mysis/memory.db")
+}
+
+impl Default for MemoryConfig {
+    fn default() -> Self {
+        Self {
+            db_path: default_memory_db_path(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
