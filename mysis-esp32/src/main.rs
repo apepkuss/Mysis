@@ -15,6 +15,7 @@ use mysis_core::agent::{run_agent_loop, AgentConfig};
 use mysis_core::tool::Tool;
 use std::sync::{Arc, Mutex};
 use tools::gpio::GpioWriteTool;
+use tools::dht::{DhtModel, DhtReadTool};
 use tools::memory::{MemoryDeleteTool, MemoryListTool, MemoryRecallTool, MemoryStoreTool};
 
 // MVP 硬编码配置，Phase 2 将改为 NVS + build.rs
@@ -62,6 +63,17 @@ fn main() {
         { peripherals.pins.gpio4.downgrade() }
     };
     let gpio_write = GpioWriteTool::new("living_room_light", default_pin).unwrap();
+    // DHT 传感器引脚
+    let dht_pin = {
+        #[cfg(feature = "esp32s3")]
+        { peripherals.pins.gpio14.downgrade() }
+        #[cfg(feature = "esp32c3")]
+        { peripherals.pins.gpio5.downgrade() }
+        #[cfg(feature = "esp32c6")]
+        { peripherals.pins.gpio5.downgrade() }
+    };
+    let dht_read = DhtReadTool::new("indoor", dht_pin, DhtModel::Dht22).unwrap();
+
     let memory_store_tool = MemoryStoreTool::new(nvs_memory.clone());
     let memory_recall_tool = MemoryRecallTool::new(nvs_memory.clone());
     let memory_list_tool = MemoryListTool::new(nvs_memory.clone());
@@ -69,6 +81,7 @@ fn main() {
 
     let mut all_tools: Vec<Box<dyn Tool>> = vec![
         Box::new(gpio_write),
+        Box::new(dht_read),
         Box::new(memory_store_tool),
         Box::new(memory_recall_tool),
         Box::new(memory_list_tool),
@@ -126,6 +139,7 @@ fn build_system_prompt(device_id: &str, preferences: &[(String, String)]) -> Str
 
     prompt.push_str("\n## 可用工具\n");
     prompt.push_str("- gpio_write_living_room_light: 控制客厅灯\n");
+    prompt.push_str("- dht_read_indoor: 读取室内温湿度传感器\n");
     prompt.push_str("- memory_store: 记住用户偏好\n");
     prompt.push_str("- memory_recall: 查询已记住的信息\n");
     prompt.push_str("- memory_list: 列出指定分类下的所有记忆\n");
