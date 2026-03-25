@@ -15,7 +15,7 @@ use mysis_core::agent::{run_agent_loop, AgentConfig};
 use mysis_core::tool::Tool;
 use std::sync::{Arc, Mutex};
 use tools::gpio::GpioWriteTool;
-use tools::memory::{MemoryRecallTool, MemoryStoreTool};
+use tools::memory::{MemoryDeleteTool, MemoryListTool, MemoryRecallTool, MemoryStoreTool};
 
 // MVP 硬编码配置，Phase 2 将改为 NVS + build.rs
 const WIFI_SSID: &str = "YOUR_SSID";
@@ -64,11 +64,15 @@ fn main() {
     let gpio_write = GpioWriteTool::new("living_room_light", default_pin).unwrap();
     let memory_store_tool = MemoryStoreTool::new(nvs_memory.clone());
     let memory_recall_tool = MemoryRecallTool::new(nvs_memory.clone());
+    let memory_list_tool = MemoryListTool::new(nvs_memory.clone());
+    let memory_delete_tool = MemoryDeleteTool::new(nvs_memory.clone());
 
     let mut all_tools: Vec<Box<dyn Tool>> = vec![
         Box::new(gpio_write),
         Box::new(memory_store_tool),
         Box::new(memory_recall_tool),
+        Box::new(memory_list_tool),
+        Box::new(memory_delete_tool),
     ];
 
     // MQTT 连接
@@ -124,11 +128,15 @@ fn build_system_prompt(device_id: &str, preferences: &[(String, String)]) -> Str
     prompt.push_str("- gpio_write_living_room_light: 控制客厅灯\n");
     prompt.push_str("- memory_store: 记住用户偏好\n");
     prompt.push_str("- memory_recall: 查询已记住的信息\n");
+    prompt.push_str("- memory_list: 列出指定分类下的所有记忆\n");
+    prompt.push_str("- memory_delete: 删除一条记忆\n");
 
     prompt.push_str("\n## 规则\n");
     prompt.push_str("- 执行操作前确认安全，操作后报告结果。\n");
     prompt.push_str("- 当你发现用户的新偏好时，使用 memory_store 工具记住它。\n");
     prompt.push_str("- 当你需要查询历史信息时，使用 memory_recall 工具搜索。\n");
+    prompt.push_str("- 当用户要求查看所有记忆时，使用 memory_list 工具。\n");
+    prompt.push_str("- 当用户要求遗忘某条信息时，使用 memory_delete 工具。\n");
     prompt
 }
 

@@ -55,6 +55,105 @@ impl<M: Memory> Tool for MemoryStoreTool<M> {
     }
 }
 
+/// LLM 可调用的记忆列表工具
+/// 列出指定分类下的所有记忆键值对
+pub struct MemoryListTool<M: Memory> {
+    memory: Arc<Mutex<M>>,
+}
+
+impl<M: Memory> MemoryListTool<M> {
+    pub fn new(memory: Arc<Mutex<M>>) -> Self {
+        Self { memory }
+    }
+}
+
+impl<M: Memory> Tool for MemoryListTool<M> {
+    fn name(&self) -> &str {
+        "memory_list"
+    }
+
+    fn description(&self) -> &str {
+        "列出指定分类下的所有记忆。用于查看已存储的全部偏好、设备状态或别名。"
+    }
+
+    fn parameters_schema(&self) -> &str {
+        r#"{"type":"object","properties":{"category":{"type":"string","enum":["preference","device_state","alias"],"description":"要列出的记忆分类"}},"required":["category"]}"#
+    }
+
+    fn execute(&mut self, params: &str) -> Result<String, ToolError> {
+        let v: serde_json::Value =
+            serde_json::from_str(params).map_err(|e| ToolError::InvalidParams(e.to_string()))?;
+
+        let category = v["category"]
+            .as_str()
+            .ok_or_else(|| ToolError::InvalidParams("missing 'category'".into()))?;
+
+        let mem = self
+            .memory
+            .lock()
+            .map_err(|e| ToolError::ExecutionFailed(format!("lock failed: {e}")))?;
+        let entries = mem
+            .list(category)
+            .map_err(|e| ToolError::ExecutionFailed(e))?;
+
+        let items: Vec<String> = entries
+            .iter()
+            .map(|(k, v)| format!(r#"{{"key":"{k}","value":"{v}"}}"#))
+            .collect();
+
+        Ok(format!(
+            r#"{{"category":"{category}","count":{},"entries":[{}]}}"#,
+            entries.len(),
+            items.join(",")
+        ))
+    }
+}
+
+/// LLM 可调用的记忆删除工具
+/// 当用户要求遗忘某条记忆时使用
+pub struct MemoryDeleteTool<M: Memory> {
+    memory: Arc<Mutex<M>>,
+}
+
+impl<M: Memory> MemoryDeleteTool<M> {
+    pub fn new(memory: Arc<Mutex<M>>) -> Self {
+        Self { memory }
+    }
+}
+
+impl<M: Memory> Tool for MemoryDeleteTool<M> {
+    fn name(&self) -> &str {
+        "memory_delete"
+    }
+
+    fn description(&self) -> &str {
+        "删除一条记忆。当用户要求忘掉某个偏好或信息时使用。"
+    }
+
+    fn parameters_schema(&self) -> &str {
+        r#"{"type":"object","properties":{"key":{"type":"string","description":"要删除的记忆键名"}},"required":["key"]}"#
+    }
+
+    fn execute(&mut self, params: &str) -> Result<String, ToolError> {
+        let v: serde_json::Value =
+            serde_json::from_str(params).map_err(|e| ToolError::InvalidParams(e.to_string()))?;
+
+        let key = v["key"]
+            .as_str()
+            .ok_or_else(|| ToolError::InvalidParams("missing 'key'".into()))?;
+
+        let mut mem = self
+            .memory
+            .lock()
+            .map_err(|e| ToolError::ExecutionFailed(format!("lock failed: {e}")))?;
+        let removed = mem
+            .forget(key)
+            .map_err(|e| ToolError::ExecutionFailed(e))?;
+
+        Ok(format!(r#"{{"success":{removed},"key":"{key}"}}"#))
+    }
+}
+
 /// LLM 可调用的记忆召回工具
 /// 当 LLM 需要查询本地记忆时使用
 pub struct MemoryRecallTool<M: Memory> {
