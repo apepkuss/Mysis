@@ -1,3 +1,4 @@
+mod chip;
 mod memory_nvs;
 mod mqtt_transport;
 mod tools;
@@ -51,9 +52,16 @@ fn main() {
     connect_wifi(&mut wifi);
     log::info!("WiFi connected");
 
-    // 初始化工具
-    let gpio_write =
-        GpioWriteTool::new("living_room_light", peripherals.pins.gpio13.downgrade()).unwrap();
+    // 初始化工具（使用芯片默认 GPIO 引脚）
+    let default_pin = {
+        #[cfg(feature = "esp32s3")]
+        { peripherals.pins.gpio13.downgrade() }
+        #[cfg(feature = "esp32c3")]
+        { peripherals.pins.gpio4.downgrade() }
+        #[cfg(feature = "esp32c6")]
+        { peripherals.pins.gpio4.downgrade() }
+    };
+    let gpio_write = GpioWriteTool::new("living_room_light", default_pin).unwrap();
     let memory_store_tool = MemoryStoreTool::new(nvs_memory.clone());
     let memory_recall_tool = MemoryRecallTool::new(nvs_memory.clone());
 
@@ -82,10 +90,10 @@ fn main() {
     // 构建带记忆上下文的 system prompt
     let config = AgentConfig {
         device_id: DEVICE_ID.into(),
-        chip_model: "esp32s3".into(),
+        chip_model: chip::CHIP_MODEL.into(),
         max_iterations: 5,
         llm_timeout_secs: 30,
-        history_max_rounds: 10,
+        history_max_rounds: chip::MAX_HISTORY_ROUNDS,
         system_prompt: build_system_prompt(DEVICE_ID, &preferences),
     };
 

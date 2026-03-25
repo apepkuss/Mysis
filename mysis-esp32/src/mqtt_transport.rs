@@ -1,3 +1,4 @@
+use crate::chip;
 use esp_idf_svc::mqtt::client::*;
 use mysis_core::agent::Transport;
 use mysis_core::protocol::*;
@@ -24,6 +25,8 @@ impl EspMqttTransport {
 
         let conf = MqttClientConfiguration {
             client_id: Some(device_id),
+            buffer_size: chip::MQTT_RX_BUF_SIZE,
+            out_buffer_size: chip::MQTT_TX_BUF_SIZE,
             ..Default::default()
         };
 
