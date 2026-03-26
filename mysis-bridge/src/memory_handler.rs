@@ -9,7 +9,9 @@ pub fn handle_memory_store(
     device_id: &str,
     req: &MemoryStoreRequest,
 ) -> Result<(), String> {
-    store.store_memory(device_id, &req.category, &req.content, req.metadata.clone())
+    store
+        .store_memory(device_id, &req.category, &req.content, req.metadata.clone())
+        .map(|_| ())
 }
 
 /// 处理 memory/recall 请求，返回 MemoryRecallResult

@@ -1,5 +1,6 @@
 mod config;
 mod device_manager;
+mod embedder;
 mod forwarder;
 mod memory_handler;
 mod memory_store;
@@ -9,7 +10,6 @@ mod time_service;
 use crate::config::BridgeConfig;
 use crate::device_manager::DeviceManager;
 use crate::forwarder::LlmForwarder;
-use crate::memory_handler::{handle_memory_recall, handle_memory_store};
 use crate::memory_store::SqliteMemoryStore;
 use crate::scheduler::Scheduler;
 use crate::time_service::TimeService;
@@ -37,6 +37,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = BridgeConfig::from_file(&cli.config)?;
     tracing::info!("loaded config from {}", cli.config);
 
+    let recall_top_k = config.memory.recall_top_k;
+    let similarity_threshold = config.memory.similarity_threshold;
     let forwarder = Arc::new(LlmForwarder::new(config.llm));
     let device_manager = Arc::new(Mutex::new(DeviceManager::new(Duration::from_secs(
         config.devices.heartbeat_timeout_secs,
@@ -56,6 +58,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .map_err(|e| format!("failed to open memory database: {e}"))?,
     ));
     tracing::info!("memory store initialized at {db_path}");
+
+    // 初始化嵌入模型（可选，降级为纯关键词匹配）
+    let embedder: Arc<Option<Mutex<embedder::Embedder>>> =
+        if let Some(ref model_dir) = config.memory.embedding_model_dir {
+            match embedder::Embedder::new(model_dir, config.memory.embedding_dim) {
+                Ok(e) => {
+                    tracing::info!("embedding model loaded from {model_dir}");
+                    Arc::new(Some(Mutex::new(e)))
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "embedding model not available: {e}. Falling back to keyword search. \
+                         Run scripts/download_model.sh to download the model."
+                    );
+                    Arc::new(None)
+                }
+            }
+        } else {
+            tracing::info!("embedding model not configured, using keyword search only");
+            Arc::new(None)
+        };
 
     // MQTT 连接
     let mut mqtt_opts = MqttOptions::new(
@@ -129,6 +152,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let time_service = time_service.clone();
                 let scheduler = scheduler.clone();
+                let embedder = embedder.clone();
 
                 tokio::spawn(async move {
                     if let Err(e) = handle_message(
@@ -140,6 +164,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         &memory_store,
                         &time_service,
                         &scheduler,
+                        &embedder,
+                        recall_top_k,
+                        similarity_threshold,
                     )
                     .await
                     {
@@ -166,6 +193,9 @@ async fn handle_message(
     memory_store: &Arc<Mutex<SqliteMemoryStore>>,
     time_service: &Arc<Mutex<TimeService>>,
     scheduler: &Arc<Mutex<Scheduler>>,
+    embedder: &Arc<Option<Mutex<embedder::Embedder>>>,
+    recall_top_k: usize,
+    similarity_threshold: f32,
 ) -> Result<(), String> {
     let parts: Vec<&str> = topic.split('/').collect();
     // 预期格式: mysis/{device_id}/{type}/...
@@ -197,14 +227,51 @@ async fn handle_message(
             .map_err(|e| format!("invalid memory store request JSON: {e}"))?;
 
         let mut store = memory_store.lock().await;
-        handle_memory_store(&mut store, device_id, &req)?;
+        let memory_id = store
+            .store_memory(device_id, &req.category, &req.content, req.metadata.clone())
+            .map_err(|e| format!("store memory failed: {e}"))?;
+
+        // 生成嵌入向量（如果模型可用）
+        if let Some(ref emb_mutex) = **embedder {
+            let mut emb = emb_mutex.lock().await;
+            match emb.embed(&req.content) {
+                Ok(vector) => {
+                    store.store_embedding(memory_id, &vector)?;
+                    tracing::debug!("stored embedding for memory {memory_id}");
+                }
+                Err(e) => {
+                    tracing::warn!("embedding failed for memory {memory_id}: {e}");
+                }
+            }
+        }
+
         tracing::info!("stored memory for {device_id}: {}", req.category);
     } else if topic.ends_with("/memory/recall") {
         let req: MemoryRecallRequest = serde_json::from_slice(payload)
             .map_err(|e| format!("invalid memory recall request JSON: {e}"))?;
 
         let store = memory_store.lock().await;
-        let result = handle_memory_recall(&store, device_id, &req)?;
+
+        // 使用混合召回（向量 + 关键词）
+        let query_vector = if let Some(ref emb_mutex) = **embedder {
+            let mut emb = emb_mutex.lock().await;
+            emb.embed(&req.query).ok()
+        } else {
+            None
+        };
+
+        let memories = store.hybrid_recall(
+            device_id,
+            &req.query,
+            query_vector.as_deref(),
+            recall_top_k,
+            similarity_threshold,
+        )?;
+
+        let result = MemoryRecallResult {
+            id: req.id.clone(),
+            memories,
+        };
         let result_json = serde_json::to_vec(&result)
             .map_err(|e| format!("failed to serialize recall result: {e}"))?;
 

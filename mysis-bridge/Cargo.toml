@@ -17,3 +17,6 @@ toml = "0.8"
 rusqlite = { version = "0.31", features = ["bundled"] }
 chrono = { version = "0.4", features = ["serde"] }
 chrono-tz = "0.10"
+ort = "2.0.0-rc.12"
+tokenizers = { version = "0.21", default-features = false, features = ["onig"] }
+ndarray = "0.17"

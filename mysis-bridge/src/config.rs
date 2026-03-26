@@ -14,17 +14,42 @@ pub struct BridgeConfig {
 pub struct MemoryConfig {
     #[serde(default = "default_memory_db_path")]
     pub db_path: String,
+    /// 嵌入模型目录（含 model.onnx 和 tokenizer.json）
+    #[serde(default)]
+    pub embedding_model_dir: Option<String>,
+    /// 嵌入向量维度
+    #[serde(default = "default_embedding_dim")]
+    pub embedding_dim: usize,
+    /// 向量召回相似度阈值
+    #[serde(default = "default_similarity_threshold")]
+    pub similarity_threshold: f32,
+    /// 向量召回 Top-K
+    #[serde(default = "default_recall_top_k")]
+    pub recall_top_k: usize,
 }
 
 fn default_memory_db_path() -> String {
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
     format!("{home}/.mysis/memory.db")
 }
+fn default_embedding_dim() -> usize {
+    384
+}
+fn default_similarity_threshold() -> f32 {
+    0.5
+}
+fn default_recall_top_k() -> usize {
+    5
+}
 
 impl Default for MemoryConfig {
     fn default() -> Self {
         Self {
             db_path: default_memory_db_path(),
+            embedding_model_dir: None,
+            embedding_dim: default_embedding_dim(),
+            similarity_threshold: default_similarity_threshold(),
+            recall_top_k: default_recall_top_k(),
         }
     }
 }
