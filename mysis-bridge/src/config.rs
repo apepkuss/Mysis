@@ -45,11 +45,17 @@ fn default_client_id() -> String {
     "mysis-bridge".into()
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct LlmConfig {
+    /// LLM 提供商：`openai`（默认）或 `claude`
+    #[serde(default = "default_provider")]
+    pub provider: String,
     pub base_url: String,
     #[serde(default = "default_model")]
     pub model: String,
+    /// API 密钥（Claude 使用 x-api-key，OpenAI 使用 Bearer token）
+    #[serde(default)]
+    pub api_key: Option<String>,
     #[allow(dead_code)]
     #[serde(default = "default_max_tokens")]
     pub max_tokens: u32,
@@ -57,6 +63,9 @@ pub struct LlmConfig {
     pub timeout_secs: u64,
 }
 
+fn default_provider() -> String {
+    "openai".into()
+}
 fn default_model() -> String {
     "default".into()
 }

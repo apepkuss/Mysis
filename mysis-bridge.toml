@@ -4,6 +4,10 @@ port = 1883
 client_id = "mysis-bridge"
 
 [llm]
+# LLM 提供商："openai"（默认，兼容 Ollama/ironmlx）或 "claude"（Anthropic Messages API）
+provider = "openai"
+# API 密钥（Claude 必填，OpenAI/本地推理可省略）
+# api_key = "sk-ant-..."
 # ironmlx 本地 LLM 推理服务
 base_url = "http://localhost:8000/v1"
 model = "qwen3-8b"
